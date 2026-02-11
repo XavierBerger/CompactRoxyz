@@ -1,0 +1,82 @@
+# BoundingBoxInfo - FreeCAD 1.0 Macro
+# Shows bounding box dimensions of the selected object
+# and optionally creates a visible bounding box shape.
+
+import FreeCAD as App
+import FreeCADGui as Gui
+import Part
+from PySide2.QtWidgets import QMessageBox
+
+def get_shape_from_object(obj):
+    """Return a usable Shape from a FreeCAD object."""
+    if hasattr(obj, "Shape") and obj.Shape is not None:
+        return obj.Shape
+    try:
+        return obj.Shape
+    except Exception:
+        return None
+
+def format_bb(bb):
+    cx, cy, cz = bb.Center.x, bb.Center.y, bb.Center.z
+    return (
+		"Bounding box dimensions:\n"        
+		"    XLength: {:.3f} mm\n    YLength: {:.3f} mm\n    ZLength: {:.3f} mm\n"
+        "    XMin: {:.3f} | XMax: {:.3f}\n    YMin: {:.3f} | YMax: {:.3f}\n    ZMin: {:.3f} | ZMax: {:.3f}\n"
+        "    Center: ({:.3f}, {:.3f}, {:.3f})"
+    ).format(
+        bb.XLength, bb.YLength, bb.ZLength,
+        bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax,
+        cx, cy, cz
+    )
+
+def main():
+    sel = Gui.Selection.getSelection()
+    if not sel:
+        QMessageBox.warning(None, "BoundingBoxInfo", "No object selected.\nSelect an object in the tree view.")
+        print("BoundingBoxInfo :: No object selected.")
+        return
+
+    obj = sel[0]
+    shape = get_shape_from_object(obj)
+    if shape is None:
+        QMessageBox.critical(None, "BoundingBoxInfo", "The selected object has no usable Shape.")
+        print("BoundingBoxInfo :: No usable shape.")
+        return
+
+    bb = shape.BoundBox
+
+    # Console output
+    print("=== Bounding Box ===")
+    print("Object:", obj.Name, "| Label:", getattr(obj, "Label", ""))
+    print(format_bb(bb))
+
+    # Main popup
+    msg = QMessageBox()
+    msg.setWindowTitle("BoundingBoxInfo")
+    msg.setText(format_bb(bb))
+    msg.setInformativeText("Create a visible bounding box solid?")
+    msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+    ret = msg.exec_()
+
+    if ret == QMessageBox.Yes:
+        doc = App.ActiveDocument
+        box = Part.makeBox(bb.XLength, bb.YLength, bb.ZLength, App.Vector(bb.XMin, bb.YMin, bb.ZMin))
+        box_obj = doc.addObject("Part::Feature", "BoundingBox_" + obj.Name)
+        box_obj.Label = "BoundingBox_" + getattr(obj, "Label", obj.Name)
+        box_obj.Shape = box
+
+        try:
+            box_obj.ViewObject.Transparency = 70
+            box_obj.ViewObject.DisplayMode = "Flat Lines"
+        except Exception:
+            pass
+
+        doc.recompute()
+        QMessageBox.information(None, "BoundingBoxInfo", f"Bounding box created: {box_obj.Label}")
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        QMessageBox.critical(None, "BoundingBoxInfo - Error", str(e))
+        print("BoundingBoxInfo - Error:", e)
