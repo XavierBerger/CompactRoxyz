@@ -1,0 +1,75 @@
+import FreeCAD as App
+import FreeCADGui as Gui
+
+def toggle_visibility():
+    # Get the active document
+    doc = App.ActiveDocument
+    if not doc:
+        print("Aucun document actif")
+        return
+
+    # Find all containers with bodies starting with 'skel'
+    containers = set()  # Using a set to avoid duplicates
+    for obj in doc.Objects:
+        if obj.Name.startswith('skel'):
+            # Get the container (parent group)
+            container = None
+            for parent in obj.InList:
+                if parent.isDerivedFrom("App::DocumentObjectGroup"):
+                    containers.add(parent)
+                    break
+
+    # Convert set to list for consistent order
+    containers = list(containers)
+
+    # Determine the current state and toggle visibility
+    skel_visible = False
+    for container in containers:
+        # Check if 'skel' objects are visible
+        for obj in container.Group:
+            if obj.Name.startswith('skel') and obj.Visibility:
+                skel_visible = True
+                break
+
+    # Function to find the next object to show
+    def get_next_visible(container, current_visible):
+        objects = [obj for obj in container.Group if not obj.Name.startswith('skel')]
+        if not objects:
+            return None
+        current_index = -1
+        for i, obj in enumerate(objects):
+            if obj.Visibility:
+                current_index = i
+                break
+        next_index = (current_index + 1) % len(objects)
+        return objects[next_index] if next_index != 0 else None
+
+    # Toggle visibility logic
+    for container in containers:
+        skel_objects = [obj for obj in container.Group if obj.Name.startswith('skel')]
+        other_objects = [obj for obj in container.Group if not obj.Name.startswith('skel')]
+
+        if skel_visible:
+            # Hide all 'skel' objects and show the next object in the container
+            for skel_obj in skel_objects:
+                skel_obj.Visibility = False
+            # Show the next object in the container
+            next_obj = get_next_visible(container, None)
+            if next_obj:
+                next_obj.Visibility = True
+            else:
+                # If no other objects, show all 'skel' objects
+                for skel_obj in skel_objects:
+                    skel_obj.Visibility = True
+        else:
+            # Hide all non-skel objects and show all 'skel' objects
+            for obj in other_objects:
+                obj.Visibility = False
+            for skel_obj in skel_objects:
+                skel_obj.Visibility = True
+
+    # Refresh the view
+    Gui.ActiveDocument.resetEdit()
+
+toggle_visibility()
+
