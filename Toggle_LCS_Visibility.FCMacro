@@ -1,0 +1,80 @@
+# -*- coding: utf-8 -*-
+# ToggleLCSVisibility.FCMacro
+#
+# Bascule la visibilité de tous les LCS (Local Coordinate Systems)
+# contenus dans les éléments sélectionnés (et leurs sous-objets),
+# sans toucher aux autres objets.
+#
+# Compatible FreeCAD 1.0+
+
+import FreeCAD
+import FreeCADGui
+
+LCS_TARGET_TYPES = (
+    "PartDesign::CoordinateSystem",
+    "App::LocalCoordinateSystem",
+)
+
+def collect_lcs(obj, found=None):
+    """Parcourt récursivement un objet et ses enfants pour trouver les LCS."""
+    if found is None:
+        found = []
+    if obj.TypeId in LCS_TARGET_TYPES:
+        if obj not in found:
+            found.append(obj)
+    # Parcourt aussi le Group si disponible (App::Part, Body, etc.)
+    if hasattr(obj, "Group"):
+        for child in obj.Group:
+            collect_lcs(child, found)
+    # Parcourt les enfants référencés (OutList)
+    for child in obj.OutList:
+        collect_lcs(child, found)
+    return found
+
+
+def toggle_lcs_visibility():
+    doc = FreeCAD.ActiveDocument
+    if doc is None:
+        FreeCAD.Console.PrintWarning("Aucun document actif.\n")
+        return
+
+    selection = FreeCADGui.Selection.getSelection()
+
+    if not selection:
+        FreeCAD.Console.PrintWarning(
+            "Aucun élément sélectionné. "
+            "Sélectionnez un ou plusieurs éléments dans l'arbre.\n"
+        )
+        return
+
+    # Collecte tous les LCS dans les éléments sélectionnés
+    lcs_objects = []
+    for obj in selection:
+        collect_lcs(obj, lcs_objects)
+
+    if not lcs_objects:
+        FreeCAD.Console.PrintMessage(
+            "Aucun LCS trouvé dans la sélection.\n"
+        )
+        return
+
+    # Bascule : si au moins un visible → on cache tout ; sinon → on affiche tout
+    any_visible = any(obj.Visibility for obj in lcs_objects)
+    new_state = not any_visible
+
+    changed = 0
+    for obj in lcs_objects:
+        if obj.Visibility != new_state:
+            obj.Visibility = new_state
+            changed += 1
+
+    action = "affichés" if new_state else "masqués"
+    FreeCAD.Console.PrintMessage(
+        f"{len(lcs_objects)} LCS {action} dans la sélection ({changed} modifié(s)).\n"
+    )
+
+    doc.recompute()
+    FreeCADGui.updateGui()
+
+
+toggle_lcs_visibility()
